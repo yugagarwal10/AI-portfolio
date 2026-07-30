@@ -17,6 +17,10 @@ backend/__pycache__/
 
 # Embeddings Cache & Vector Database local files
 backend/data/embeddings_cache.json
+backend/data/portfolio_info.txt
+backend/data/*.txt
+!backend/data/*.example
+
 
 # Production build output
 /dist

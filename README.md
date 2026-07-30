@@ -142,6 +142,16 @@ yug-ai-portfolio/
 
 ---
 
+## 📝 Customizing Portfolio Knowledge Base
+
+To customize the AI assistant with your own profile, experience, and projects:
+
+1. Open `backend/data/portfolio_info.txt`.
+2. Update the structured sections (`Personal Introduction`, `Professional Experience`, `Project Portfolio`, `Detailed Technical Skills List`) with your information.
+3. You can also add additional `.txt` files inside `backend/data/`. The RAG engine automatically scans all text documents, splits sections into smart chunks, and regenerates vector embeddings whenever content is updated!
+
+---
+
 ## 📡 API Reference
 
 | Endpoint | Method | Description |

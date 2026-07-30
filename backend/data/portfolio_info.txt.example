@@ -1,0 +1,89 @@
+---
+SECTION: Personal Introduction & Overview
+NAME: Your Name (also known as YourNickname)
+ROLE: Software Engineer & AI Systems Architect
+LOCATION: Your Location / Country
+EMAIL: your.email@example.com
+GITHUB: github.com/yourusername
+LINKEDIN: linkedin.com/in/yourusername
+SUMMARY:
+I am a Software Engineer and AI Builder specializing in backend engineering, high-throughput APIs, custom AI/RAG agent systems, and full-stack software applications. I focus on high-performance system design, database indexing, caching strategies, and building scalable MVPs.
+EDUCATION:
+- Degree: Bachelor of Computer Applications (BCA) / Computer Science
+- Institution: Your University / College
+- Timeline: 2023 - 2026
+
+---
+SECTION: Professional Experience & Roles
+1. COMPANY: Tech Company A
+   ROLE: Software Engineer
+   TIMELINE: 2025 - Present
+   RESPONSIBILITIES & ACHIEVEMENTS:
+   - Caching Architecture: Optimized application database latency by introducing caching layer nodes using Redis, reducing query response times by over 40%.
+   - Performance Engineering: Tuned backend APIs to handle higher concurrent transaction loads under system constraints.
+   - Task Orchestration: Designed distributed task queues and background event coordination pipelines to manage asynchronous data syncs safely.
+   - Tech Stack: Redis, Node.js, Express, FastAPI, Python, PostgreSQL.
+
+2. COMPANY: Tech Company B
+   ROLE: Software Developer
+   TIMELINE: 2024 - 2025
+   RESPONSIBILITIES & ACHIEVEMENTS:
+   - Enterprise Systems Architecture: Spearheaded core modules for enterprise platform scaling capabilities to handle large concurrent user structures.
+   - Database Optimization: Structured robust database schemas, indexing pipelines, and high-speed data migration scripts for MongoDB and PostgreSQL.
+   - Document Indexing: Built automated catalog search and index services, increasing document indexing speeds by 30%.
+   - Tech Stack: React, Node.js, Express, MongoDB, PostgreSQL, Redis, Docker.
+
+3. COMPANY: Digital Agency C
+   ROLE: Frontend Developer
+   TIMELINE: 2023 - 2024
+   RESPONSIBILITIES & ACHIEVEMENTS:
+   - UI/UX Development: Developed responsive, interactive, and visually striking frontend user interfaces for international clients.
+   - Performance Tuning: Optimized core visual assets, CSS bundles, and image compression to ensure smooth, lightning-fast rendering metrics.
+   - Tech Stack: HTML5, CSS3, JavaScript (ES6), React, TailwindCSS.
+
+---
+SECTION: Project Portfolio & Technical Deep-Dive
+1. PROJECT: AI Content Assistant
+   TECH STACK: Python, Telegram Bot Console, Groq / OpenAI LLM APIs, Vector Stores, Sentence-Transformers.
+   DESCRIPTION:
+   - Built a comprehensive pipeline system that automates professional social media post drafts, outlines, and pipeline workflows.
+   - Features custom RAG (Retrieval-Augmented Generation) context retrieval matching user inputs with pre-indexed brand guideline dossiers to maintain absolute brand voice consistency.
+   - Uses asynchronous Celery/Redis tasks to manage batch generations.
+
+2. PROJECT: Enterprise ERP Platform
+   TECH STACK: React, Node.js, Express, MongoDB, Redis, Docker.
+   DESCRIPTION:
+   - Developed a scalable enterprise resource planning platform catering to worker management, dynamic scheduling rosters, and financial payroll streams.
+   - Engineered in-memory memory buffers using Redis to process complex payroll statements, preventing database locking and ensuring transactional integrity.
+   - Containerized the system architecture using Docker for smooth staging and production cluster deployment.
+
+3. PROJECT: Dispatch Engine
+   TECH STACK: Node.js, WebSockets (ws/socket.io), Redis (Pub/Sub), Go (Golang).
+   DESCRIPTION:
+   - Designed a low-latency real-time booking and dispatch coordination engine.
+   - Implemented real-time location streaming and driver bidding loops using persistent WebSocket connections.
+   - Managed high concurrency matching criteria with Go routines and Redis Pub/Sub, facilitating message dispatch latency of under 50ms.
+
+---
+SECTION: Detailed Technical Skills List
+BACKEND ENGINEERING:
+- Node.js, Express, Fastify, NestJS (JavaScript / TypeScript)
+- Python (FastAPI, Django, Flask)
+- Go / Golang (Standard Library, Gin, Fiber)
+AI & MACHINE LEARNING / RAG:
+- LangChain, LlamaIndex, Sentence-Transformers, OpenAI API, Groq SDK
+- Dense-vector search engines (Qdrant, ChromaDB, FAISS)
+- Custom Agent execution trees and prompt engineering strategies
+DATABASES & CACHING:
+- Relational: PostgreSQL, MySQL
+- NoSQL: MongoDB
+- Cache & Message Broker: Redis, BullMQ, RabbitMQ
+DEVOPS & DEPLOYMENT:
+- Docker, Docker Compose
+- AWS (EC2, S3, RDS, IAM)
+- Nginx reverse proxies, PM2 process management
+- CI/CD automation pipelines
+FRONTEND DEVELOPMENT:
+- HTML5, CSS3, Vanilla CSS, TailwindCSS
+- React, Next.js, TypeScript (TSX)
+- Framer Motion, Lenis Scroll, WebGL/ThreeJS (basics)
