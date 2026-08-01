@@ -5,7 +5,9 @@ RAG API + MongoDB-backed multi-session chat storage.
 
 import logging
 import uuid
+import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,6 +38,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"RAG engine failed to initialize: {e}")
         rag = None
+
+    # ── Start file watcher (auto-reload on new/modified .txt in data/) ────────
+    watcher_thread = threading.Thread(target=_start_file_watcher, daemon=True)
+    watcher_thread.start()
+    logger.info("👁️  File watcher started on data/ directory.")
+
     yield
     logger.info("Shutting down.")
 
@@ -84,7 +92,59 @@ class RenameSessionRequest(BaseModel):
     title: str
 
 
-# ── Health ─────────────────────────────────────────────────────────────────────
+# ── File Watcher ──────────────────────────────────────────────────────────────────────────────────────
+_WATCH_DIR = Path("data")
+_reload_lock = threading.Lock()
+
+
+def _start_file_watcher():
+    """Watch data/ for new or modified .txt files and auto-reload RAG."""
+    try:
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+
+        class _Handler(FileSystemEventHandler):
+            def _should_handle(self, path: str) -> bool:
+                return path.endswith(".txt")
+
+            def on_created(self, event):
+                if not event.is_directory and self._should_handle(event.src_path):
+                    logger.info(f"📥 New file detected: {event.src_path} — triggering reload...")
+                    _trigger_reload()
+
+            def on_modified(self, event):
+                if not event.is_directory and self._should_handle(event.src_path):
+                    logger.info(f"✏️  File modified: {event.src_path} — triggering reload...")
+                    _trigger_reload()
+
+        observer = Observer()
+        observer.schedule(_Handler(), str(_WATCH_DIR), recursive=False)
+        observer.start()
+        observer.join()  # blocks the daemon thread
+
+    except ImportError:
+        logger.warning(
+            "⚠️  watchdog not installed — auto file-reload disabled. "
+            "Run: pip install watchdog"
+        )
+
+
+def _trigger_reload():
+    """Debounced reload — only one reload runs at a time."""
+    if not _reload_lock.acquire(blocking=False):
+        logger.info("Reload already in progress, skipping duplicate trigger.")
+        return
+    try:
+        if rag:
+            rag.reload()
+            logger.info("✅ Auto-reload complete.")
+    except Exception as e:
+        logger.error(f"Auto-reload failed: {e}")
+    finally:
+        _reload_lock.release()
+
+
+# ── Health ──────────────────────────────────────────────────────────────────────────────────────
 @app.get("/", tags=["Health"])
 def health_check():
     return {
@@ -104,6 +164,22 @@ def detailed_health():
         "chunks_indexed": len(rag.chunks),
         "active_rag_sessions": len(rag._sessions),
     }
+
+
+@app.post("/admin/reload", tags=["Admin"])
+def manual_reload():
+    """Manually trigger a hot-reload of all data/*.txt files into RAG."""
+    _require_rag()
+    try:
+        result = rag.reload()
+        return {
+            "status": "reloaded",
+            "old_chunks": result["old_chunks"],
+            "new_chunks": result["new_chunks"],
+        }
+    except Exception as e:
+        logger.error(f"/admin/reload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── RAG Query Routes ───────────────────────────────────────────────────────────

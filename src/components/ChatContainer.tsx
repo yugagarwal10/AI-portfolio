@@ -131,11 +131,45 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                   ? "bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-600 text-white rounded-tr-none font-medium shadow-[0_10px_25px_-5px_rgba(99,102,241,0.4)] border border-purple-500/20" 
                   : "bg-white/80 border border-white text-zinc-800 rounded-tl-none font-medium leading-relaxed shadow-[0_4px_12px_rgba(0,0,0,0.015)] backdrop-blur-sm"
               } word-break`}>
-                <p 
+                <div 
+                  className={`prose-chat text-[15.5px] lg:text-[16px] space-y-1.5 ${msg.sender === "user" ? "text-white" : "text-zinc-800"}`}
                   dangerouslySetInnerHTML={{ 
-                    __html: msg.text
-                      .replace(/\n/g, '<br/>')
-                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
+                    __html: (() => {
+                      let text = msg.text;
+                      
+                      // Normalize standard bold formatting **bold**
+                      text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                      
+                      // Convert bullet points with '+' or '*' followed by space into clean block style
+                      const lines = text.split("\n");
+                      let inList = false;
+                      const formattedLines = lines.map((line) => {
+                        const trimmed = line.trim();
+                        // Match bullets like '+ ' or '* '
+                        if (trimmed.startsWith("+ ") || trimmed.startsWith("* ")) {
+                          const content = trimmed.substring(2);
+                          let listElement = "";
+                          if (!inList) {
+                            inList = true;
+                            listElement = `<ul class="list-disc pl-5 mt-1 space-y-1">`;
+                          }
+                          return `${listElement}<li class="text-zinc-700 font-normal">${content}</li>`;
+                        } else {
+                          let prefix = "";
+                          if (inList) {
+                            inList = false;
+                            prefix = "</ul>";
+                          }
+                          return prefix + (trimmed ? `<p>${trimmed}</p>` : "");
+                        }
+                      });
+                      
+                      if (inList) {
+                        formattedLines.push("</ul>");
+                      }
+                      
+                      return formattedLines.join("");
+                    })()
                   }} 
                 />
               </div>
@@ -155,20 +189,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggestions Horizontal Wrap ( Sleek Pills ) */}
-      <div className="flex flex-wrap gap-2 p-5 border-t border-zinc-200/30 bg-white/40 select-none justify-center">
-        {["Projects.", "Backend.", "AI.", "Startups.", "Experience."].map((chip) => (
-          <button
-            type="button"
-            key={chip}
-            onClick={() => handleQuery(chip.replace(".", ""))}
-            disabled={isTyping}
-            className="px-4 py-2 text-[11.5px] font-extrabold bg-white hover:bg-zinc-950 hover:text-white border border-zinc-200/70 hover:border-zinc-950 rounded-full transition-all shadow-[0_2px_6px_rgba(0,0,0,0.02)] cursor-pointer disabled:opacity-50"
-          >
-            {chip}
-          </button>
-        ))}
-      </div>
+
 
       {/* Bottom input area */}
       <div className="p-5 bg-white/60 backdrop-blur-md border-t border-zinc-200/40 flex items-center gap-3">

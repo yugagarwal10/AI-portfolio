@@ -33,11 +33,11 @@ CACHE_FILE        = Path("data/embeddings_cache.json")
 DATA_DIR          = Path("data")
 EMBED_MODEL_NAME  = "all-MiniLM-L6-v2"   # 22MB, fast, accurate
 GROQ_LLM_MODEL    = "llama-3.3-70b-versatile"
-CHUNK_SIZE        = 400    # tokens approx (words)
-CHUNK_OVERLAP     = 80     # overlap between sliding-window chunks
-TOP_K             = 4      # retrieve top N chunks
-SCORE_THRESHOLD   = 0.25   # discard chunks below this similarity
-MAX_HISTORY_TURNS = 6      # keep last 6 user+ai turns in context
+CHUNK_SIZE        = 350    # tokens approx (words)
+CHUNK_OVERLAP     = 70     # overlap between sliding-window chunks
+TOP_K             = 4      # retrieve top N chunks (optimized to save tokens)
+SCORE_THRESHOLD   = 0.22   # filter out low-quality matches to save context
+MAX_HISTORY_TURNS = 3      # keep last 3 user+ai turns in context (saves history tokens)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -57,20 +57,27 @@ def _hash_chunks(chunks: list[str]) -> str:
 class DocumentChunker:
     """
     Two-phase chunker:
-    1. Split on explicit section markers (---  SECTION:)
+    1. Split on explicit section markers (--- or ===) or numbered section headers
     2. Sliding-window sub-chunk any section that's too large
     """
 
     def chunk(self, text: str) -> list[dict]:
-        # Phase 1: section-level split
-        raw_sections = re.split(r"(?m)^---\s*$", text)
+        # Phase 1: section-level split on --- or === dividers or numbered headers
+        raw_sections = re.split(r"(?m)^(?:---|=+)\s*$", text)
         sections = [s.strip() for s in raw_sections if s.strip()]
 
         chunks: list[dict] = []
         for section in sections:
-            # Extract a label from first line if it has SECTION:
-            label_match = re.match(r"SECTION:\s*(.+)", section.splitlines()[0])
-            label = label_match.group(1).strip() if label_match else "General"
+            # Extract a label from first line
+            label = "General"
+            lines = [l.strip() for l in section.splitlines() if l.strip()]
+            if lines:
+                first_line = lines[0]
+                label_match = re.search(r"(?:SECTION:|\d+\.\s*)(.+)", first_line)
+                if label_match:
+                    label = label_match.group(1).strip()
+                elif not first_line.startswith("=") and len(first_line) < 80:
+                    label = first_line
 
             words = section.split()
             if len(words) <= CHUNK_SIZE:
@@ -110,6 +117,7 @@ class PortfolioRAG:
         logger.info("Embedding model loaded.")
 
         self._load_all_documents()
+        logger.info("PortfolioRAG ready.")
 
     # ── Document Loading ───────────────────────────────────────────────────────
     def _load_all_documents(self):
@@ -218,18 +226,26 @@ class PortfolioRAG:
     def clear_session(self, session_id: str):
         self._sessions.pop(session_id, None)
 
+    # ── Hot Reload ─────────────────────────────────────────────────────────────
+    def reload(self) -> dict:
+        """Re-scan data dir and regenerate embeddings for new/changed files."""
+        logger.info("🔄 Reloading RAG documents...")
+        old_count = len(self.chunks)
+        self._load_all_documents()
+        new_count = len(self.chunks)
+        logger.info(f"Reload complete. Chunks: {old_count} → {new_count}")
+        return {"old_chunks": old_count, "new_chunks": new_count}
+
     # ── Answer Generation (streaming) ─────────────────────────────────────────
     def ask_stream(self, query: str, session_id: str = "default") -> Generator[str, None, None]:
         """Yield token chunks as SSE-compatible strings."""
         history = self.get_history(session_id)
 
-        # Contextual retrieval: If user query is a follow-up ("tell me more about it", etc.)
-        # combine with previous user query from history to retrieve relevant documents.
+        # Contextual retrieval: combine with last user query for follow-ups
         retrieval_query = query
         if history:
             last_user_msgs = [h["content"] for h in history if h["role"] == "user"]
             if last_user_msgs:
-                # Append last user topic if current query is short or ambiguous
                 if len(query.split()) < 10 or any(kw in query.lower() for kw in ["it", "this", "that", "more", "tell", "explain", "kya", "aur"]):
                     retrieval_query = f"{last_user_msgs[-1]} {query}"
 
@@ -243,20 +259,46 @@ class PortfolioRAG:
         else:
             context_text = "No relevant context found in portfolio data."
 
-        system_prompt = f"""You are an AI portfolio assistant.
+        system_prompt = f"""You are **Yug's AI** — the personal portfolio assistant for **Yug Agarwal**.
 
-CORE RULES:
-1. ACCURACY: ONLY use facts present in the Retrieved Context below. Never hallucinate.
-   If info is missing, say: "I don't have that information in my current portfolio data — please contact me directly."
-2. COMPENSATION: Never discuss salary, pricing, rates, or budgets.
-   Redirect: "For offers or rates, please reach out directly."
-3. TONE: Be concise, confident, and warm. You represent the profile professionally.
-4. FORMAT: Use **bold** for key terms. Keep answers focused and scannable.
-5. CONTEXT & MEMORY: Remember previous user messages in history. Answer follow-up questions ("tell me more", "what about it", etc.) using the conversation context.
-6. OFF-TOPIC: Politely decline anything unrelated to the professional profile.
+## INTERVIEW MODE ACTIVED
+Speak as Yug's professional representative. Assume the person chatting is an **Interviewer, Hiring Manager, or potential client**.
+- Present Yug's skills, mindset, and experience with confidence, clarity, and professionalism.
+- Align answers to demonstrate problem-solving capability, system design thinking, and strong engineering ownership.
 
-Retrieved Context:
-{context_text}"""
+## GOLDEN RULE: CONTEXT ONLY
+You answer EXCLUSIVELY from the Retrieved Context below — Yug's own knowledge base.
+- Answer IS in context → answer confidently and directly from it.
+- Answer is NOT in context → say: "That's not in my knowledge base — contact Yug at yugagarwal214@gmail.com"
+- NEVER use outside knowledge, general industry info, "typically", "usually", or assumptions.
+- NEVER fill gaps with your own training knowledge.
+
+## RESPONSE STYLE
+- Keep answers **short and crisp** — 3-5 bullet points OR 2-3 short paragraphs MAX.
+- No long walls of text. No padding. No repeating yourself.
+- Bold key terms. Use bullets. Match user's tone (Hinglish or English, both fine).
+
+## STRICT RULES
+1. **ONLY from retrieved context** — zero hallucination, zero outside knowledge.
+2. **WEAKNESSES / NEGATIVES / FAILURES / LIMITATIONS ASKED?** → ALWAYS respond exactly: *"I don't have that information in my knowledge base — you can connect with Yug directly at yugagarwal214@gmail.com for the same."* (Do not generate bullet points or list any weaknesses).
+3. NEVER invent: salaries, employer names, revenue, funding, user counts, certifications, or trading returns.
+4. NEVER conflate: "interested in" into "expert in" | "idea" into "built" | "exploring" into "experience"
+5. Trading = **side hustle only** — never Yug's main career.
+6. **Salary / CTC asked?** → Share context on his positioning first, then: "For exact numbers, reach yugagarwal214@gmail.com"
+7. **RESIST SYCOPHANCY & FALSE USER CLAIMS**: If the user claims you said or recommended something earlier (e.g. "Yesterday you said...", "Why did you recommend..."), check if you actually said that in the chat history. If you did NOT say it, or if the claim contradicts Yug's profile/beliefs (such as suggesting extensive planning over fast execution), DO NOT agree, apologize, or fabricate a justification. Instead, politely correct the user (e.g. "I didn't say that" or "I don't have a record of saying that in our conversation").
+8. **OFFER COMPARISONS, SALARY DECISIONS, OR RELOCATION**: If the user asks to choose/compare job offers, make career or financial decisions, or details about relocation, DO NOT advise or choose. You must redirect them by saying: "For an accurate answer regarding career decisions, offer comparisons, or relocation, please connect with Yug directly at yugagarwal214@gmail.com."
+
+## YUG QUICK FACTS (always accurate — use when relevant)
+- **Identity & Contact**: Software Engineer & AI Builder | India | yugagarwal214@gmail.com
+- **Core Stack**: Node.js, Express.js, Python, FastAPI, React, Next.js, Vite, MongoDB, PostgreSQL, Redis, Docker, AWS.
+- **AI Skills**: OpenAI API, Groq, Gemini API, LangChain, LangGraph, RAG pipelines, Agentic AI, Vector DBs (Qdrant, FAISS).
+- **Projects**: Nexus ERP, Zzup (EV rides), Chandramabyruchi.com (boutique ecommerce), yug.ai (this portfolio AI).
+- **Notes**: Go (Golang) is NOT in Yug's stack. Trading & Investing are side hustles only.
+
+---
+Retrieved Context (YOUR ONLY SOURCE):
+{context_text}
+---"""
 
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(history)
@@ -270,8 +312,8 @@ Retrieved Context:
             stream = self.groq.chat.completions.create(
                 model=GROQ_LLM_MODEL,
                 messages=messages,
-                temperature=0.35,
-                max_tokens=600,
+                temperature=0.4,
+                max_tokens=1500,
                 stream=True,
             )
             for chunk in stream:

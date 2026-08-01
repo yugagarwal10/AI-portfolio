@@ -11,7 +11,7 @@ export default function App() {
   const [messages, setMessages]         = useState<Message[]>([]);
   const [chatInput, setChatInput]       = useState("");
   const [isTyping, setIsTyping]         = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled]                  = useState(true);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
 
   // ── Session / Sidebar State ───────────────────────────────────────────────
@@ -105,30 +105,36 @@ export default function App() {
   }, [activeSessionId, soundEnabled]);
 
   // ── SSE Streaming ─────────────────────────────────────────────────────────
+  // ── SSE Emulated Greeting Stream ─────────────────────────────────────────
   const streamAiMessage = (fullText: string, callback?: () => void) => {
     setIsTyping(true);
     let index = 0;
     setMessages((prev) => [...prev, { sender: "ai", text: "", isStreaming: true }]);
+    
+    // Chunking text update for emulated greeting with throttle
     const interval = setInterval(() => {
       setMessages((prev) => {
         const next = [...prev];
         const last = next[next.length - 1];
-        if (last?.isStreaming) last.text = fullText.slice(0, index + 1);
+        if (last?.isStreaming) last.text = fullText.slice(0, index + 3); // output chunks of 3 chars to speed up
         return next;
       });
-      index++;
+      index += 3;
       if (index >= fullText.length) {
         clearInterval(interval);
         setMessages((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
-          if (last) last.isStreaming = false;
+          if (last) {
+            last.text = fullText;
+            last.isStreaming = false;
+          }
           return next;
         });
         setIsTyping(false);
         if (callback) callback();
       }
-    }, 12);
+    }, 16);
   };
 
   // ── Send a query ──────────────────────────────────────────────────────────
@@ -370,13 +376,18 @@ export default function App() {
             </svg>
             New Chat
           </button>
-          <button
-            type="button"
-            onClick={() => { synth.play("click"); setSoundEnabled(!soundEnabled); }}
-            className="text-xs font-bold text-zinc-500 hover:text-zinc-950 transition-colors px-3 py-1.5 rounded-full border border-zinc-200 bg-white/60 shadow-sm cursor-pointer"
+          {/* Download Resume Button */}
+          <a
+            href="/yug_resume.pdf"
+            download="Yug_Agarwal_Resume.pdf"
+            className="text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 hover:shadow-[0_0_15px_rgba(124,58,237,0.4)] transition-all px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 cursor-pointer"
+            title="Download Yug's Resume"
           >
-            {soundEnabled ? "🔊 SOUND ON" : "🔇 SOUND OFF"}
-          </button>
+            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Resume
+          </a>
         </div>
       </header>
 
