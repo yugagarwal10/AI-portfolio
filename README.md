@@ -72,75 +72,20 @@ yug-ai-portfolio/
 
 ---
 
-## ⚡ Quickstart Guide
+## 🚀 Quickstart & Setup Guide
 
-### Prerequisites
+To get the application up and running locally, please refer to our comprehensive step-by-step setup guide:
 
-- **Node.js** v18+ and **npm**
-- **Python** v3.10+
-- **MongoDB** running locally (`mongodb://localhost:27017`) or a [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) URI.
-- **Groq API Key** (Free tier available at [console.groq.com](https://console.groq.com/))
+👉 **[Setup and Installation Guide (setup.md)](file:///c:/Users/yugag/OneDrive/Desktop/yug-ai-portfolio/setup.md)**
 
----
-
-### 1️⃣ Backend Setup
-
-1. Navigate to the `backend` directory:
-   ```bash
-   cd backend
-   ```
-
-2. Create and activate a Python virtual environment:
-   ```bash
-   python -m venv .venv
-   
-   # Windows (PowerShell):
-   .venv\Scripts\Activate.ps1
-   
-   # macOS / Linux:
-   source .venv/bin/activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. Create your `.env` file from `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
-
-5. Add your Groq API key and MongoDB URI in `.env`:
-   ```env
-   GROQ_API_KEY=your_groq_api_key_here
-   MONGO_URI=mongodb://localhost:27017
-   MONGO_DB_NAME=yug_ai
-   ```
-
-6. Start the FastAPI backend server:
-   ```bash
-   python main.py
-   ```
-   *The server will run on `http://localhost:8000`.*
+This guide covers:
+- System prerequisites (Node.js, Python, MongoDB, Groq API)
+- Backend virtual environment and API configuration
+- Frontend dependency installation and development server start
+- Troubleshooting common issues
 
 ---
 
-### 2️⃣ Frontend Setup
-
-1. Open a new terminal in the project root directory:
-   ```bash
-   npm install
-   ```
-
-2. Start the Vite development server:
-   ```bash
-   npm run dev
-   ```
-
-3. Open `http://localhost:5173` in your browser.
-
----
 
 ## 📝 Customizing Portfolio Knowledge Base
 
