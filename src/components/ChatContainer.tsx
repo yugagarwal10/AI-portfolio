@@ -111,21 +111,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = React.memo(({
       {/* Top Bar Header (macOS terminal style) */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200/30 bg-white/70 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 mr-1">
-            <button 
-              type="button"
-              onClick={() => setIsChatExpanded(false)}
-              className="w-3 h-3 rounded-full bg-red-400/80 cursor-pointer hover:bg-red-500" 
-              title="Close"
-            />
-            <span className="w-3 h-3 rounded-full bg-yellow-400/80 cursor-default" />
-            <button 
-              type="button"
-              onClick={() => { synth.play("click"); setIsChatExpanded(!isChatExpanded); }}
-              className="w-3 h-3 rounded-full bg-green-400/80 cursor-pointer hover:bg-green-500" 
-              title="Toggle Fullscreen"
-            />
-          </div>
           
           {onToggleSidebar && (
             <button
@@ -151,7 +136,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = React.memo(({
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              <span>+ New Chat</span>
+              <span>New Chat</span>
             </button>
           )}
         </div>
