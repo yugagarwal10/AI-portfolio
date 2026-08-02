@@ -1,23 +1,39 @@
-"""
-yug.ai — FastAPI Backend v3.0
-RAG API + MongoDB-backed multi-session chat storage.
-"""
-
 import logging
 import uuid
 import threading
+import os
+import re
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, field_validator
 
 from rag import PortfolioRAG
 import database as db
 
 logger = logging.getLogger(__name__)
+
+# ── Rate Limiter ───────────────────────────────────────────────────────────────
+class RateLimiter:
+    def __init__(self, limit: int = 30, window: int = 60):
+        self.limit = limit
+        self.window = window
+        self.requests = defaultdict(list)
+
+    def is_allowed(self, ip: str) -> bool:
+        now = time.time()
+        self.requests[ip] = [t for t in self.requests[ip] if now - t < self.window]
+        if len(self.requests[ip]) >= self.limit:
+            return False
+        self.requests[ip].append(now)
+        return True
+
+limiter = RateLimiter(limit=30, window=60)
 
 # ── App lifecycle ──────────────────────────────────────────────────────────────
 rag: PortfolioRAG | None = None
@@ -56,13 +72,39 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── CORS configuration ──────────────────────────────────────────────────────────
+ALLOWED_ORIGINS_ENV = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:8000")
+ALLOWED_ORIGINS = [o.strip() for o in ALLOWED_ORIGINS_ENV.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Global Security Middlewares ────────────────────────────────────────────────
+@app.middleware("http")
+async def security_hardening_middleware(request: Request, call_next):
+    # 1. Rate limiting on query endpoints
+    if request.url.path in ("/query", "/query/stream"):
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        if not limiter.is_allowed(client_ip):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please wait a minute before querying again."}
+            )
+
+    # 2. Proceed with request
+    response = await call_next(request)
+
+    # 3. Add HTTP security headers
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -79,17 +121,51 @@ class QueryRequest(BaseModel):
             raise ValueError("Query exceeds 1000-character limit.")
         return v.strip()
 
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v: str) -> str:
+        if v:
+            v = v.strip()
+            if not re.match(r"^[a-zA-Z0-9\-_\s]+$", v):
+                raise ValueError("Invalid characters in session_id.")
+        return v
+
 
 class ClearRequest(BaseModel):
     session_id: str
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v: str) -> str:
+        if v:
+            v = v.strip()
+            if not re.match(r"^[a-zA-Z0-9\-_\s]+$", v):
+                raise ValueError("Invalid characters in session_id.")
+        return v
 
 
 class NewSessionRequest(BaseModel):
     title: str = "New Chat"
 
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        if len(v) > 100:
+            raise ValueError("Title exceeds 100-character limit.")
+        return v.strip()
+
 
 class RenameSessionRequest(BaseModel):
     title: str
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Title cannot be empty.")
+        if len(v) > 100:
+            raise ValueError("Title exceeds 100-character limit.")
+        return v.strip()
 
 
 # ── File Watcher ──────────────────────────────────────────────────────────────────────────────────────
@@ -271,9 +347,15 @@ def create_chat(body: NewSessionRequest):
         raise HTTPException(status_code=500, detail="Could not create session.")
 
 
+def _validate_session_path_param(session_id: str):
+    if not re.match(r"^[a-zA-Z0-9\-_\s]+$", session_id):
+        raise HTTPException(status_code=400, detail="Invalid session_id format.")
+
+
 @app.get("/chats/{session_id}/messages", tags=["Chats"])
 def get_chat_messages(session_id: str):
     """Return all messages for a specific chat session."""
+    _validate_session_path_param(session_id)
     try:
         messages = db.get_messages(session_id)
         return {"session_id": session_id, "messages": messages}
@@ -285,6 +367,7 @@ def get_chat_messages(session_id: str):
 @app.patch("/chats/{session_id}", tags=["Chats"])
 def rename_chat(session_id: str, body: RenameSessionRequest):
     """Rename a chat session."""
+    _validate_session_path_param(session_id)
     try:
         db.update_session_title(session_id, body.title)
         return {"renamed": True, "session_id": session_id, "title": body.title}
@@ -295,6 +378,7 @@ def rename_chat(session_id: str, body: RenameSessionRequest):
 @app.delete("/chats/{session_id}", tags=["Chats"])
 def delete_chat(session_id: str):
     """Delete a chat session and all its messages."""
+    _validate_session_path_param(session_id)
     try:
         db.delete_session(session_id)
         if rag:
