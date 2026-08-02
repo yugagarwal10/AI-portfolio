@@ -18,6 +18,8 @@ export default function App() {
   const [sessions, setSessions]             = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsLoadingMore, setSessionsLoadingMore] = useState(false);
+  const [totalSessions, setTotalSessions]     = useState(0);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
 
   const sessionIdRef  = useRef<string>("");
@@ -25,20 +27,42 @@ export default function App() {
 
   useEffect(() => { isTypingRef.current = isTyping; }, [isTyping]);
 
-  // ── Load all sessions on mount ────────────────────────────────────────────
-  const fetchSessions = useCallback(async () => {
-    setSessionsLoading(true);
+  // ── Load sessions with pagination support ─────────────────────────────────
+  const fetchSessions = useCallback(async (reset = false) => {
+    if (reset) {
+      setSessionsLoading(true);
+    } else {
+      setSessionsLoadingMore(true);
+    }
     try {
-      const res = await fetch(`${API_BASE}/chats`);
+      let skipCount = 0;
+      if (!reset) {
+        setSessions((prev) => {
+          skipCount = prev.length;
+          return prev;
+        });
+      }
+      const res = await fetch(`${API_BASE}/chats?limit=10&skip=${skipCount}`);
       if (res.ok) {
         const data = await res.json();
-        setSessions(data.sessions || []);
+        const fetched = data.sessions || [];
+        setSessions((prev) => {
+          if (reset) return fetched;
+          // Avoid duplicates
+          const existingIds = new Set(prev.map((s) => s._id));
+          const newSessions = fetched.filter((s: ChatSession) => !existingIds.has(s._id));
+          return [...prev, ...newSessions];
+        });
+        setTotalSessions(data.total || 0);
       }
     } catch { /* backend offline */ }
-    finally { setSessionsLoading(false); }
+    finally {
+      setSessionsLoading(false);
+      setSessionsLoadingMore(false);
+    }
   }, []);
 
-  useEffect(() => { fetchSessions(); }, [fetchSessions]);
+  useEffect(() => { fetchSessions(true); }, [fetchSessions]);
 
   // ── Load messages for a session ───────────────────────────────────────────
   const loadSession = useCallback(async (sessionId: string) => {
@@ -106,7 +130,7 @@ export default function App() {
 
   // ── SSE Streaming ─────────────────────────────────────────────────────────
   // ── SSE Emulated Greeting Stream ─────────────────────────────────────────
-  const streamAiMessage = (fullText: string, callback?: () => void) => {
+  const streamAiMessage = useCallback((fullText: string, callback?: () => void) => {
     setIsTyping(true);
     let index = 0;
     setMessages((prev) => [...prev, { sender: "ai", text: "", isStreaming: true }]);
@@ -114,20 +138,30 @@ export default function App() {
     // Chunking text update for emulated greeting with throttle
     const interval = setInterval(() => {
       setMessages((prev) => {
+        if (prev.length === 0) return prev;
         const next = [...prev];
         const last = next[next.length - 1];
-        if (last?.isStreaming) last.text = fullText.slice(0, index + 3); // output chunks of 3 chars to speed up
+        if (last?.isStreaming) {
+          next[next.length - 1] = {
+            ...last,
+            text: fullText.slice(0, index + 3)
+          };
+        }
         return next;
       });
       index += 3;
       if (index >= fullText.length) {
         clearInterval(interval);
         setMessages((prev) => {
+          if (prev.length === 0) return prev;
           const next = [...prev];
           const last = next[next.length - 1];
           if (last) {
-            last.text = fullText;
-            last.isStreaming = false;
+            next[next.length - 1] = {
+              ...last,
+              text: fullText,
+              isStreaming: false
+            };
           }
           return next;
         });
@@ -135,10 +169,10 @@ export default function App() {
         if (callback) callback();
       }
     }, 16);
-  };
+  }, []);
 
   // ── Send a query ──────────────────────────────────────────────────────────
-  const handleQuery = async (query: string) => {
+  const handleQuery = useCallback(async (query: string) => {
     if (isTypingRef.current) return;
     if (soundEnabled) synth.play("click");
 
@@ -172,25 +206,35 @@ export default function App() {
 
     const finalizeStream = () => {
       setMessages((prev) => {
+        if (prev.length === 0) return prev;
         const next = [...prev];
         const last = next[next.length - 1];
         if (last?.isStreaming) {
-          last.text = accRef.text;
-          last.isStreaming = false;
+          next[next.length - 1] = {
+            ...last,
+            text: accRef.text,
+            isStreaming: false
+          };
         }
         return next;
       });
       setIsTyping(false);
       // Refresh session list to update titles + ordering
-      fetchSessions();
+      fetchSessions(true);
     };
 
     const appendToken = (token: string) => {
       accRef.text += token;
       setMessages((prev) => {
+        if (prev.length === 0) return prev;
         const next = [...prev];
         const last = next[next.length - 1];
-        if (last?.isStreaming) last.text = accRef.text;
+        if (last?.isStreaming) {
+          next[next.length - 1] = {
+            ...last,
+            text: accRef.text
+          };
+        }
         return next;
       });
     };
@@ -248,7 +292,28 @@ export default function App() {
       accRef.text = "⚠️ **Connection Error**: RAG server offline. Please start your FastAPI backend.";
       finalizeStream();
     }
-  };
+  }, [fetchSessions, loadSession, streamAiMessage]);
+
+  const handleSelectSession = useCallback((id: string) => {
+    loadSession(id);
+    setSidebarOpen(false);
+  }, [loadSession]);
+
+  const handleCloseSidebar = useCallback(() => {
+    setSidebarOpen(false);
+  }, []);
+
+  const handleOpenSidebar = useCallback(() => {
+    setSidebarOpen(true);
+  }, []);
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
+
+  const handleLoadMoreSessions = useCallback(() => {
+    fetchSessions(false);
+  }, [fetchSessions]);
 
   // ── Mouse trail canvas ────────────────────────────────────────────────────
   const initTrailCanvas = () => {
@@ -319,12 +384,15 @@ export default function App() {
       <ChatSidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
-        onSelectSession={(id) => { loadSession(id); setSidebarOpen(false); }}
+        onSelectSession={handleSelectSession}
         onNewChat={createNewChat}
         onDeleteSession={deleteSession}
         isLoading={sessionsLoading}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        onClose={handleCloseSidebar}
+        hasMore={sessions.length < totalSessions}
+        onLoadMore={handleLoadMoreSessions}
+        isLoadingMore={sessionsLoadingMore}
       />
 
       {/* Light overlay */}
@@ -352,7 +420,7 @@ export default function App() {
           {/* Sidebar toggle */}
           <button
             type="button"
-            onClick={() => setSidebarOpen(true)}
+            onClick={handleOpenSidebar}
             className="w-9 h-9 rounded-xl flex items-center justify-center border border-zinc-200 bg-white/70 shadow-sm hover:bg-zinc-950 hover:text-white hover:border-zinc-950 transition-all cursor-pointer group"
             title="Chat History"
           >
@@ -455,7 +523,7 @@ export default function App() {
           isChatExpanded={isChatExpanded}
           setIsChatExpanded={setIsChatExpanded}
           onNewChat={createNewChat}
-          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          onToggleSidebar={handleToggleSidebar}
         />
       </main>
 

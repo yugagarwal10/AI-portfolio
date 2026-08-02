@@ -249,11 +249,12 @@ def clear_session(request: ClearRequest):
 
 # ── Chat Sessions (MongoDB) ────────────────────────────────────────────────────
 @app.get("/chats", tags=["Chats"])
-def list_chats():
+def list_chats(limit: int = 10, skip: int = 0):
     """Return all chat sessions sorted by most recent activity."""
     try:
-        sessions = db.list_sessions()
-        return {"sessions": sessions}
+        sessions = db.list_sessions(limit=limit, skip=skip)
+        total = db.get_sessions_col().count_documents({})
+        return {"sessions": sessions, "total": total}
     except Exception as e:
         logger.error(f"/chats list error: {e}")
         raise HTTPException(status_code=500, detail="Database unavailable.")

@@ -7,4 +7,3 @@ numpy
 sse-starlette
 pymongo
 watchdog
-x

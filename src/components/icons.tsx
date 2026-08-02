@@ -47,6 +47,12 @@ export const GoIcon = () => (
   </svg>
 );
 
+export const SQLIcon = () => (
+  <svg className="w-6 h-6" viewBox="0 0 24 24" fill="#00758F" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C6.48 2 2 4.02 2 6.5s4.48 4.5 10 4.5 10-2.02 10-4.5S17.52 2 12 2zm0 18c-5.52 0-10-2.02-10-4.5v-3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v3c0 2.48-4.48 4.5-10 4.5zm0-6c-5.52 0-10-2.02-10-4.5v-3c0 2.48 4.48 4.5 10 4.5s10-2.02 10-4.5v3c0 2.48-4.48 4.5-10 4.5z"/>
+  </svg>
+);
+
 export const renderSkillIcon = (name: string) => {
   switch (name) {
     case "Docker": return <DockerIcon />;
@@ -57,6 +63,7 @@ export const renderSkillIcon = (name: string) => {
     case "AWS": return <AwsIcon />;
     case "FastAPI": return <FastApiIcon />;
     case "Go": return <GoIcon />;
+    case "SQL": return <SQLIcon />;
     default: return null;
   }
 };

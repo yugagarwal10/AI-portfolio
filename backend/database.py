@@ -79,10 +79,10 @@ def create_session(session_id: Optional[str] = None, title: str = "New Chat") ->
     return doc
 
 
-def list_sessions() -> list[dict]:
+def list_sessions(limit: int = 10, skip: int = 0) -> list[dict]:
     sessions = get_sessions_col().find(
         {}, {"_id": 1, "title": 1, "created_at": 1, "updated_at": 1}
-    ).sort("updated_at", DESCENDING)
+    ).sort("updated_at", DESCENDING).skip(skip).limit(limit)
     return [_serialize(s) for s in sessions]
 
 

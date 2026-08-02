@@ -1,3 +1,4 @@
+import React from "react";
 import { renderSkillIcon } from "./icons";
 
 interface Skill {
@@ -16,10 +17,10 @@ const skills: Skill[] = [
   { name: "Python" },
   { name: "AWS" },
   { name: "FastAPI" },
-  { name: "Go" }
+  { name: "SQL" }
 ];
 
-export const SkillOrbit: React.FC<SkillOrbitProps> = ({ onSkillClick }) => {
+export const SkillOrbit = React.memo<SkillOrbitProps>(({ onSkillClick }) => {
   return (
     <div className="absolute w-[450px] h-[450px] z-20 pointer-events-none">
       {skills.map((skill, idx) => (
@@ -43,4 +44,6 @@ export const SkillOrbit: React.FC<SkillOrbitProps> = ({ onSkillClick }) => {
       ))}
     </div>
   );
-};
+});
+
+SkillOrbit.displayName = "SkillOrbit";

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Generator
 
 import numpy as np
-from groq import Groq
+from groq import Groq, RateLimitError
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 
@@ -33,9 +33,10 @@ CACHE_FILE        = Path("data/embeddings_cache.json")
 DATA_DIR          = Path("data")
 EMBED_MODEL_NAME  = "all-MiniLM-L6-v2"   # 22MB, fast, accurate
 GROQ_LLM_MODEL    = "llama-3.3-70b-versatile"
-CHUNK_SIZE        = 350    # tokens approx (words)
-CHUNK_OVERLAP     = 70     # overlap between sliding-window chunks
-TOP_K             = 4      # retrieve top N chunks (optimized to save tokens)
+GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant"
+CHUNK_SIZE        = 220    # tokens approx (words) — optimized to save tokens
+CHUNK_OVERLAP     = 40     # overlap between sliding-window chunks
+TOP_K             = 3      # retrieve top N chunks (optimized to save tokens)
 SCORE_THRESHOLD   = 0.22   # filter out low-quality matches to save context
 MAX_HISTORY_TURNS = 3      # keep last 3 user+ai turns in context (saves history tokens)
 
@@ -322,11 +323,53 @@ Retrieved Context (YOUR ONLY SOURCE):
                     full_response += delta
                     yield delta
 
+        except RateLimitError as rle:
+            logger.warning(f"Groq Rate limit hit on {GROQ_LLM_MODEL}, falling back to {GROQ_FALLBACK_MODEL}: {rle}")
+            try:
+                stream = self.groq.chat.completions.create(
+                    model=GROQ_FALLBACK_MODEL,
+                    messages=messages,
+                    temperature=0.4,
+                    max_tokens=1500,
+                    stream=True,
+                )
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        full_response += delta
+                        yield delta
+            except Exception as fe:
+                err_msg = f"⚠️ Fallback LLM error: {str(fe)}"
+                logger.error(err_msg)
+                yield err_msg
+                return
+
         except Exception as e:
-            err_msg = f"⚠️ LLM error: {str(e)}"
-            logger.error(err_msg)
-            yield err_msg
-            return
+            if "429" in str(e) or "rate" in str(e).lower():
+                logger.warning(f"Rate limit fallback triggered by generic error: {e}")
+                try:
+                    stream = self.groq.chat.completions.create(
+                        model=GROQ_FALLBACK_MODEL,
+                        messages=messages,
+                        temperature=0.4,
+                        max_tokens=1500,
+                        stream=True,
+                    )
+                    for chunk in stream:
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            full_response += delta
+                            yield delta
+                except Exception as fe:
+                    err_msg = f"⚠️ Fallback LLM error: {str(fe)}"
+                    logger.error(err_msg)
+                    yield err_msg
+                    return
+            else:
+                err_msg = f"⚠️ LLM error: {str(e)}"
+                logger.error(err_msg)
+                yield err_msg
+                return
 
         # Store AI response in history
         self.add_to_history(session_id, "assistant", full_response)
