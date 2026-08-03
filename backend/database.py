@@ -59,13 +59,15 @@ def _session_query(session_id: str) -> dict:
 
 
 # ── Session CRUD ───────────────────────────────────────────────────────────────
-def create_session(session_id: Optional[str] = None, title: str = "New Chat") -> dict:
+def create_session(session_id: Optional[str] = None, title: str = "New Chat", visitor_id: Optional[str] = None) -> dict:
     now = datetime.now(timezone.utc)
     doc = {
         "title": title,
         "created_at": now,
         "updated_at": now,
     }
+    if visitor_id:
+        doc["visitor_id"] = visitor_id
     if session_id:
         if ObjectId.is_valid(session_id):
             doc["_id"] = ObjectId(session_id)
@@ -79,9 +81,12 @@ def create_session(session_id: Optional[str] = None, title: str = "New Chat") ->
     return doc
 
 
-def list_sessions(limit: int = 10, skip: int = 0) -> list[dict]:
+def list_sessions(limit: int = 10, skip: int = 0, visitor_id: Optional[str] = None) -> list[dict]:
+    query = {}
+    if visitor_id:
+        query["visitor_id"] = visitor_id
     sessions = get_sessions_col().find(
-        {}, {"_id": 1, "title": 1, "created_at": 1, "updated_at": 1}
+        query, {"_id": 1, "title": 1, "created_at": 1, "updated_at": 1, "visitor_id": 1}
     ).sort("updated_at", DESCENDING).skip(skip).limit(limit)
     return [_serialize(s) for s in sessions]
 
@@ -104,7 +109,7 @@ def update_session_title(session_id: str, title: str):
         logger.warning(f"Could not update session title: {e}")
 
 
-def touch_session(session_id: str, default_title: str = "New Chat"):
+def touch_session(session_id: str, default_title: str = "New Chat", visitor_id: Optional[str] = None):
     """Update updated_at timestamp. Auto-create session if not present."""
     try:
         res = get_sessions_col().update_one(
@@ -112,7 +117,7 @@ def touch_session(session_id: str, default_title: str = "New Chat"):
             {"$set": {"updated_at": datetime.now(timezone.utc)}}
         )
         if res.matched_count == 0:
-            create_session(session_id=session_id, title=default_title)
+            create_session(session_id=session_id, title=default_title, visitor_id=visitor_id)
     except Exception as e:
         logger.warning(f"Could not touch session: {e}")
 
@@ -127,7 +132,7 @@ def delete_session(session_id: str):
 
 
 # ── Message CRUD ───────────────────────────────────────────────────────────────
-def save_message(session_id: str, role: str, text: str) -> dict:
+def save_message(session_id: str, role: str, text: str, visitor_id: Optional[str] = None) -> dict:
     now = datetime.now(timezone.utc)
     doc = {
         "session_id": session_id,
@@ -139,7 +144,7 @@ def save_message(session_id: str, role: str, text: str) -> dict:
     doc["_id"] = str(result.inserted_id)
     doc["timestamp"] = now.isoformat()
     # Touch the parent session so it floats to top
-    touch_session(session_id)
+    touch_session(session_id, visitor_id=visitor_id)
     return doc
 
 

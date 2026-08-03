@@ -4,7 +4,23 @@ import { SkillOrbit } from "./components/SkillOrbit";
 import { ChatContainer, Message } from "./components/ChatContainer";
 import { ChatSidebar, ChatSession } from "./components/ChatSidebar";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
+const getVisitorId = (): string => {
+  let id = localStorage.getItem("yug_visitor_id");
+  if (!id) {
+    id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now().toString(36);
+    localStorage.setItem("yug_visitor_id", id);
+  }
+  return id;
+};
+
+const getHeaders = (extra: Record<string, string> = {}): Record<string, string> => {
+  return {
+    "X-Visitor-ID": getVisitorId(),
+    ...extra
+  };
+};
 
 export default function App() {
   // ── Chat State ───────────────────────────────────────────────────────────
@@ -42,7 +58,9 @@ export default function App() {
           return prev;
         });
       }
-      const res = await fetch(`${API_BASE}/chats?limit=10&skip=${skipCount}`);
+      const res = await fetch(`${API_BASE}/chats?limit=10&skip=${skipCount}`, {
+        headers: getHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         const fetched = data.sessions || [];
@@ -70,7 +88,9 @@ export default function App() {
     sessionIdRef.current = sessionId;
     setMessages([]);
     try {
-      const res = await fetch(`${API_BASE}/chats/${sessionId}/messages`);
+      const res = await fetch(`${API_BASE}/chats/${sessionId}/messages`, {
+        headers: getHeaders()
+      });
       if (res.ok) {
         const data = await res.json();
         const loaded: Message[] = (data.messages || []).map((m: { role: string; text: string }) => ({
@@ -89,7 +109,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/chats`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ title: "New Chat" }),
       });
       if (res.ok) {
@@ -115,7 +135,10 @@ export default function App() {
   const deleteSession = useCallback(async (sessionId: string) => {
     if (soundEnabled) synth.play("click");
     try {
-      await fetch(`${API_BASE}/chats/${sessionId}`, { method: "DELETE" });
+      await fetch(`${API_BASE}/chats/${sessionId}`, {
+        method: "DELETE",
+        headers: getHeaders()
+      });
     } catch { /* ignore */ }
     setSessions((prev) => prev.filter((s) => s._id !== sessionId));
     if (activeSessionId === sessionId) {
@@ -182,7 +205,7 @@ export default function App() {
       try {
         const res = await fetch(`${API_BASE}/chats`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ title: "New Chat" }),
         });
         if (res.ok) {
@@ -242,7 +265,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/query/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ query, session_id: sid }),
       });
 

@@ -8,7 +8,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, field_validator
@@ -260,18 +260,18 @@ def manual_reload():
 
 # ── RAG Query Routes ───────────────────────────────────────────────────────────
 @app.post("/query", tags=["RAG"])
-def query_rag(request: QueryRequest):
+def query_rag(request: QueryRequest, x_visitor_id: str = Header(None)):
     """Non-streaming query. Saves both user message and AI answer to MongoDB."""
     _require_rag()
     session_id = request.session_id or str(uuid.uuid4())
 
     # Save user message to MongoDB
-    _try_save_message(session_id, "user", request.query)
+    _try_save_message(session_id, "user", request.query, x_visitor_id)
 
     try:
         answer = rag.ask(request.query, session_id)
         # Save AI response to MongoDB
-        _try_save_message(session_id, "assistant", answer)
+        _try_save_message(session_id, "assistant", answer, x_visitor_id)
         # Auto-title the session from the first user message
         _try_auto_title(session_id, request.query)
         return {"answer": answer, "session_id": session_id}
@@ -281,7 +281,7 @@ def query_rag(request: QueryRequest):
 
 
 @app.post("/query/stream", tags=["RAG"])
-def query_rag_stream(request: QueryRequest):
+def query_rag_stream(request: QueryRequest, x_visitor_id: str = Header(None)):
     """
     Streaming SSE endpoint. Saves messages to MongoDB after stream completes.
     Events: session:<id>, data:<token>, data:[DONE], event:error
@@ -290,7 +290,7 @@ def query_rag_stream(request: QueryRequest):
     session_id = request.session_id or str(uuid.uuid4())
 
     # Save user message immediately
-    _try_save_message(session_id, "user", request.query)
+    _try_save_message(session_id, "user", request.query, x_visitor_id)
     _try_auto_title(session_id, request.query)
 
     def event_generator():
@@ -305,7 +305,7 @@ def query_rag_stream(request: QueryRequest):
             yield f"event: error\ndata: {str(e)}\n\n"
         else:
             # Persist completed AI response to MongoDB
-            _try_save_message(session_id, "assistant", full_response)
+            _try_save_message(session_id, "assistant", full_response, x_visitor_id)
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -325,11 +325,14 @@ def clear_session(request: ClearRequest):
 
 # ── Chat Sessions (MongoDB) ────────────────────────────────────────────────────
 @app.get("/chats", tags=["Chats"])
-def list_chats(limit: int = 10, skip: int = 0):
+def list_chats(limit: int = 10, skip: int = 0, x_visitor_id: str = Header(None)):
     """Return all chat sessions sorted by most recent activity."""
     try:
-        sessions = db.list_sessions(limit=limit, skip=skip)
-        total = db.get_sessions_col().count_documents({})
+        sessions = db.list_sessions(limit=limit, skip=skip, visitor_id=x_visitor_id)
+        query = {}
+        if x_visitor_id:
+            query["visitor_id"] = x_visitor_id
+        total = db.get_sessions_col().count_documents(query)
         return {"sessions": sessions, "total": total}
     except Exception as e:
         logger.error(f"/chats list error: {e}")
@@ -337,10 +340,10 @@ def list_chats(limit: int = 10, skip: int = 0):
 
 
 @app.post("/chats", tags=["Chats"])
-def create_chat(body: NewSessionRequest):
+def create_chat(body: NewSessionRequest, x_visitor_id: str = Header(None)):
     """Create a new blank chat session."""
     try:
-        session = db.create_session(title=body.title)
+        session = db.create_session(title=body.title, visitor_id=x_visitor_id)
         return session
     except Exception as e:
         logger.error(f"/chats create error: {e}")
@@ -394,12 +397,12 @@ def _require_rag():
         raise HTTPException(status_code=503, detail="RAG engine not ready.")
 
 
-def _try_save_message(session_id: str, role: str, text: str):
+def _try_save_message(session_id: str, role: str, text: str, visitor_id: Optional[str] = None):
     try:
         # Ensure the session document exists in MongoDB with matching session_id
         if not db.get_session(session_id):
-            db.create_session(session_id=session_id, title="New Chat")
-        db.save_message(session_id, role, text)
+            db.create_session(session_id=session_id, title="New Chat", visitor_id=visitor_id)
+        db.save_message(session_id, role, text, visitor_id=visitor_id)
     except Exception as e:
         logger.warning(f"Could not save message to MongoDB: {e}")
 
