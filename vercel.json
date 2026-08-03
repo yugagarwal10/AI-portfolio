@@ -5,7 +5,10 @@
       "framework": "vite"
     },
     "backend": {
-      "root": "backend"
+      "root": "backend",
+      "runtime": "python",
+      "entrypoint": "main.py"
+
     }
   },
   "rewrites": [
