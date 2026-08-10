@@ -20,6 +20,7 @@ backend/__pycache__/
 backend/data/portfolio_info.txt
 backend/data/*.txt
 !backend/data/*.example
+!backend/data/yug_agarwal_master.txt
 
 
 # Production build output
