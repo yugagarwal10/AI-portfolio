@@ -401,7 +401,7 @@ export default function App() {
   }, []);
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-[#fafafb] text-[#09090b] flex flex-col font-sans select-none antialiased bg-[url('/futuristic_lab_bg.png')] bg-cover bg-center">
+    <div className="relative min-h-screen w-full overflow-y-auto lg:overflow-hidden bg-[#fafafb] text-[#09090b] flex flex-col font-sans select-none antialiased bg-[url('/futuristic_lab_bg.png')] bg-cover bg-center">
 
       {/* Sidebar */}
       <ChatSidebar
@@ -483,32 +483,32 @@ export default function App() {
       </header>
 
       {/* ── MAIN GRID ─────────────────────────────── */}
-      <main className="relative z-10 flex-1 w-full max-w-none px-6 lg:px-12 flex flex-col lg:grid lg:grid-cols-12 gap-8 items-center py-6 overflow-y-auto lg:overflow-hidden">
+      <main className="relative z-10 flex-1 w-full max-w-none px-6 lg:px-12 flex flex-col lg:grid lg:grid-cols-12 gap-4 xl:gap-8 items-center py-6 lg:overflow-hidden">
 
         {/* LEFT: Branding */}
-        <div className="lg:col-span-3 flex flex-col gap-6 text-left">
+        <div className="lg:col-span-3 flex flex-col gap-6 text-left w-full">
           <div className="flex flex-col gap-4">
-            <h1 className="text-5xl sm:text-6xl lg:text-[72px] font-extrabold tracking-tighter text-[#09090b] leading-[0.98]">
+            <h1 className="text-4xl sm:text-5xl lg:text-4xl xl:text-5xl 2xl:text-[64px] font-extrabold tracking-tighter text-[#09090b] leading-[0.98]">
               Building <span className="rainbow-text">AI</span><br />
               that people<br />
               remember.
             </h1>
-            <p className="text-zinc-600 text-lg leading-relaxed font-semibold mt-4 max-w-sm">
+            <p className="text-zinc-600 text-base sm:text-lg leading-relaxed font-semibold mt-2 lg:mt-4 max-w-xs xl:max-w-sm">
               I build intelligent products, AI agents, backend systems and scalable software that solve real-world problems.
             </p>
           </div>
-          <div className="flex items-center gap-3 mt-6">
+          <div className="flex flex-wrap items-center gap-3 mt-4 lg:mt-6">
             <button
               type="button"
               onClick={() => handleQuery("Projects")}
-              className="px-7 py-3.5 rounded-full bg-zinc-950 text-white font-bold text-sm hover:bg-purple-600 hover:shadow-[0_0_25px_rgba(124,58,237,0.3)] transition-all flex items-center gap-2 cursor-pointer"
+              className="px-5 py-3 sm:px-6 sm:py-3 rounded-full bg-zinc-950 text-white font-bold text-sm hover:bg-purple-600 hover:shadow-[0_0_25px_rgba(124,58,237,0.3)] transition-all flex items-center gap-2 cursor-pointer"
             >
               <span>→ Talk with My AI</span>
             </button>
             <button
               type="button"
               onClick={() => handleQuery("Projects")}
-              className="px-7 py-3.5 rounded-full border border-zinc-200 bg-white text-zinc-600 font-bold text-sm hover:bg-zinc-50 transition-all cursor-pointer"
+              className="px-5 py-3 sm:px-6 sm:py-3 rounded-full border border-zinc-200 bg-white text-zinc-600 font-bold text-sm hover:bg-zinc-50 transition-all cursor-pointer"
             >
               → View Projects
             </button>
@@ -516,20 +516,22 @@ export default function App() {
         </div>
 
         {/* CENTER: Avatar */}
-        <div className="lg:col-span-4 flex justify-center items-center relative h-[380px] lg:h-[620px]">
-          <div className="absolute w-[430px] h-[430px] rounded-full energy-ring opacity-20 blur-xl animate-pulse" />
-          <div className="absolute w-[450px] h-[450px] rounded-full border-2 border-purple-500/20 shadow-[0_0_25px_rgba(124,58,237,0.25),inset_0_0_20px_rgba(124,58,237,0.15)] pointer-events-none z-10" />
-          <div className="absolute w-[450px] h-[450px] rounded-full border-2 border-dashed border-cyan-500/15 animate-spin pointer-events-none z-10" style={{ animationDuration: "60s" }} />
-          <SkillOrbit onSkillClick={handleQuery} />
-          <div className="absolute bottom-6 w-[400px] h-32 rounded-2xl glass-panel border border-white/60 shadow-inner z-0 pointer-events-none transform -skew-x-12 opacity-50" />
-          <div className="w-[360px] h-[520px] rounded-3xl overflow-hidden flex items-end justify-center relative z-30 select-none">
-            <img
-              src="/yug_real_avatar.png"
-              alt="Yug's Standing Agent"
-              width={360}
-              height={520}
-              className="w-full h-full object-contain select-none pointer-events-none"
-            />
+        <div className="lg:col-span-4 flex justify-center items-center relative h-[320px] sm:h-[420px] lg:h-[620px] w-full overflow-hidden lg:overflow-visible">
+          <div className="flex justify-center items-center relative w-[450px] h-[450px] scale-[0.6] sm:scale-[0.75] lg:scale-[0.55] xl:scale-[0.7] 2xl:scale-[0.85] transition-all origin-center">
+            <div className="absolute w-[430px] h-[430px] rounded-full energy-ring opacity-20 blur-xl animate-pulse" />
+            <div className="absolute w-[450px] h-[450px] rounded-full border-2 border-purple-500/20 shadow-[0_0_25px_rgba(124,58,237,0.25),inset_0_0_20px_rgba(124,58,237,0.15)] pointer-events-none z-10" />
+            <div className="absolute w-[450px] h-[450px] rounded-full border-2 border-dashed border-cyan-500/15 animate-spin pointer-events-none z-10" style={{ animationDuration: "60s" }} />
+            <SkillOrbit onSkillClick={handleQuery} />
+            <div className="absolute bottom-6 w-[400px] h-32 rounded-2xl glass-panel border border-white/60 shadow-inner z-0 pointer-events-none transform -skew-x-12 opacity-50" />
+            <div className="w-[360px] h-[520px] rounded-3xl overflow-hidden flex items-end justify-center relative z-30 select-none">
+              <img
+                src="/yug_real_avatar.png"
+                alt="Yug's Standing Agent"
+                width={360}
+                height={520}
+                className="w-full h-full object-contain select-none pointer-events-none"
+              />
+            </div>
           </div>
         </div>
 

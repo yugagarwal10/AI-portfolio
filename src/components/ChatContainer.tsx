@@ -104,7 +104,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = React.memo(({
       flex flex-col rounded-[32px] glass-panel overflow-hidden border border-white/60 shadow-[0_25px_60px_-15px_rgba(124,58,237,0.08)] transition-all duration-500 ease-in-out
       ${isChatExpanded 
         ? "fixed inset-6 z-[99] w-[calc(100vw-48px)] h-[calc(100vh-48px)] shadow-[0_30px_100px_rgba(124,58,237,0.2)] scale-100" 
-        : "relative lg:col-span-5 w-full h-[640px] scale-100"
+        : "relative lg:col-span-5 w-full h-[520px] lg:h-[calc(100vh-160px)] lg:max-h-[640px] scale-100"
       }
     `}>
       
