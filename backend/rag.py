@@ -31,8 +31,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-CACHE_FILE        = Path("data/embeddings_cache.json")
-DATA_DIR          = Path("data")
+_CURRENT_DIR      = Path(__file__).resolve().parent
+CACHE_FILE        = _CURRENT_DIR / "data/embeddings_cache.json"
+DATA_DIR          = _CURRENT_DIR / "data"
 EMBED_MODEL_NAME  = "all-MiniLM-L6-v2"   # 22MB, fast, accurate
 GROQ_LLM_MODEL    = "llama-3.3-70b-versatile"
 GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant"
@@ -204,6 +205,8 @@ class DocumentChunker:
 class PortfolioRAG:
     def __init__(self, data_dir: str = "data"):
         self.data_dir = Path(data_dir)
+        if not self.data_dir.is_absolute():
+            self.data_dir = Path(__file__).resolve().parent / self.data_dir
         self.chunks: list[dict] = []          # [{"text": ..., "source": ...}]
         self.embeddings: list[list[float]] = []
         self._sessions: dict[str, list[dict]] = {}  # session_id → history
@@ -274,12 +277,15 @@ class PortfolioRAG:
             logger.error(f"Failed to generate embeddings at startup: {e}")
             self.embeddings = [[0.0] * 384] * len(self.chunks)
 
-        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_FILE.write_text(
-            json.dumps({"hash": current_hash, "embeddings": self.embeddings}),
-            encoding="utf-8"
-        )
-        logger.info(f"Embeddings saved to {CACHE_FILE}.")
+        try:
+            CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            CACHE_FILE.write_text(
+                json.dumps({"hash": current_hash, "embeddings": self.embeddings}),
+                encoding="utf-8"
+            )
+            logger.info(f"Embeddings saved to {CACHE_FILE}.")
+        except Exception as e:
+            logger.warning(f"Could not save embeddings cache (this is expected on read-only filesystems like Vercel): {e}")
 
     # ── Retrieval ──────────────────────────────────────────────────────────────
     def retrieve(self, query: str, top_k: int = TOP_K) -> list[dict]:

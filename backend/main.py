@@ -38,11 +38,12 @@ limiter = RateLimiter(limit=30, window=60)
 
 # ── App lifecycle ──────────────────────────────────────────────────────────────
 rag: PortfolioRAG | None = None
+rag_error: Optional[str] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global rag
+    global rag, rag_error
     # Init MongoDB indexes
     try:
         db.init_indexes()
@@ -53,7 +54,8 @@ async def lifespan(app: FastAPI):
         rag = PortfolioRAG()
         logger.info("RAG engine initialized successfully.")
     except Exception as e:
-        logger.error(f"RAG engine failed to initialize: {e}")
+        rag_error = f"{type(e).__name__}: {str(e)}"
+        logger.error(f"RAG engine failed to initialize: {rag_error}")
         rag = None
 
     # ── Start file watcher (auto-reload on new/modified .txt in data/) ────────
@@ -171,7 +173,7 @@ class RenameSessionRequest(BaseModel):
 
 
 # ── File Watcher ──────────────────────────────────────────────────────────────────────────────────────
-_WATCH_DIR = Path("data")
+_WATCH_DIR = Path(__file__).resolve().parent / "data"
 _reload_lock = threading.Lock()
 
 
@@ -226,8 +228,9 @@ def _trigger_reload():
 @app.get("/", tags=["Health"])
 def health_check():
     return {
-        "status": "operational",
+        "status": "operational" if rag is not None else "degraded",
         "rag_ready": rag is not None,
+        "rag_error": rag_error,
         "engine": "sentence-transformers + Groq llama-3.3-70b-versatile + MongoDB",
         "version": "3.0.0",
     }
@@ -236,7 +239,10 @@ def health_check():
 @app.get("/health", tags=["Health"])
 def detailed_health():
     if rag is None:
-        raise HTTPException(status_code=503, detail="RAG engine not ready.")
+        detail = "RAG engine not ready."
+        if rag_error:
+            detail += f" Error details: {rag_error}"
+        raise HTTPException(status_code=503, detail=detail)
     return {
         "status": "ok",
         "chunks_indexed": len(rag.chunks),
