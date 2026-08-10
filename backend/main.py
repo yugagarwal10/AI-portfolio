@@ -71,6 +71,7 @@ app = FastAPI(
     description="Production RAG backend — Yugen Agarwal AI Portfolio Assistant.",
     version="3.0.0",
     lifespan=lifespan,
+    root_path="/api" if os.getenv("VERCEL") else "",
 )
 
 # ── CORS configuration ──────────────────────────────────────────────────────────
