@@ -48,7 +48,8 @@ async def lifespan(app: FastAPI):
     try:
         db.init_indexes()
     except Exception as e:
-        logger.warning(f"MongoDB init warning: {e}")
+        rag_error = f"DatabaseError: {type(e).__name__}: {str(e)}"
+        logger.error(f"MongoDB init failed: {rag_error}")
     # Init RAG engine
     try:
         rag = PortfolioRAG()

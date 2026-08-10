@@ -43,12 +43,17 @@ def get_messages_col() -> Collection:
 # ── Ensure indexes ─────────────────────────────────────────────────────────────
 def init_indexes():
     try:
+        # Ping the database to verify connection
+        db_instance = get_db()
+        db_instance.client.admin.command('ping')
+        
         get_messages_col().create_index("session_id")
         get_messages_col().create_index("timestamp")
         get_sessions_col().create_index([("updated_at", DESCENDING)])
-        logger.info("MongoDB indexes ensured.")
+        logger.info("MongoDB indexes ensured and connection verified.")
     except Exception as e:
-        logger.warning(f"Could not create indexes: {e}")
+        logger.error(f"MongoDB initialization/connection failed: {e}")
+        raise e
 
 
 # ── Internal query helper ──────────────────────────────────────────────────────
