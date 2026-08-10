@@ -13,15 +13,17 @@ import os
 import re
 import json
 import math
+import time
 import hashlib
 import logging
 from pathlib import Path
 from typing import Generator
+from collections import defaultdict
 
 import numpy as np
 from groq import Groq, RateLimitError
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
+import requests
 
 load_dotenv()
 
@@ -52,6 +54,106 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 def _hash_chunks(chunks: list[str]) -> str:
     combined = "||".join(chunks)
     return hashlib.md5(combined.encode()).hexdigest()
+
+
+def get_huggingface_embedding(texts: list[str]) -> list[list[float]]:
+    """Fetch embeddings from Hugging Face Inference API with automatic retry."""
+    api_url = f"https://api-inference.huggingface.co/models/sentence-transformers/{EMBED_MODEL_NAME}"
+    hf_token = os.getenv("HF_API_KEY")
+    headers = {}
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+        
+    for attempt in range(3):
+        try:
+            response = requests.post(
+                api_url,
+                headers=headers,
+                json={"inputs": texts, "options": {"wait_for_model": True}},
+                timeout=10
+            )
+            if response.status_code == 200:
+                res_json = response.json()
+                if isinstance(res_json, list):
+                    if len(texts) == 1 and res_json and not isinstance(res_json[0], list):
+                        return [res_json]
+                    return res_json
+                else:
+                    raise ValueError(f"Unexpected response format from Hugging Face API: {res_json}")
+            elif response.status_code == 503:
+                logger.warning(f"Hugging Face model is loading (attempt {attempt+1}/3). Waiting...")
+                time.sleep(3)
+                continue
+            else:
+                raise Exception(f"HF API Error {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.warning(f"HF API request failed (attempt {attempt+1}/3): {e}")
+            if attempt == 2:
+                raise e
+            time.sleep(1)
+            
+    raise Exception("Hugging Face API failed after retries.")
+
+
+class SimpleBM25:
+    """A pure Python implementation of the BM25 retrieval algorithm for zero-dependency local search."""
+    def __init__(self, corpus: list[str], b: float = 0.75, k1: float = 1.5):
+        self.b = b
+        self.k1 = k1
+        self.corpus_size = len(corpus)
+        self.avg_doc_len = 0.0
+        self.doc_lens = []
+        self.doc_term_freqs = []
+        self.vocab = set()
+        self.df = defaultdict(int)
+
+        def tokenize(text: str) -> list[str]:
+            return re.findall(r"\w+", text.lower())
+
+        total_len = 0
+        for doc in corpus:
+            tokens = tokenize(doc)
+            doc_len = len(tokens)
+            self.doc_lens.append(doc_len)
+            total_len += doc_len
+
+            tf = defaultdict(int)
+            for token in tokens:
+                tf[token] += 1
+                self.vocab.add(token)
+            self.doc_term_freqs.append(tf)
+
+            for token in tf:
+                self.df[token] += 1
+
+        self.avg_doc_len = total_len / self.corpus_size if self.corpus_size > 0 else 1.0
+
+        self.idf = {}
+        for token in self.vocab:
+            df_val = self.df[token]
+            self.idf[token] = math.log((self.corpus_size - df_val + 0.5) / (df_val + 0.5) + 1.0)
+
+    def search(self, query: str, top_k: int = 3) -> list[tuple[float, int]]:
+        def tokenize(text: str) -> list[str]:
+            return re.findall(r"\w+", text.lower())
+
+        q_tokens = tokenize(query)
+        scores = []
+        for idx in range(self.corpus_size):
+            score = 0.0
+            doc_len = self.doc_lens[idx]
+            tf = self.doc_term_freqs[idx]
+            for token in q_tokens:
+                if token in tf:
+                    tf_val = tf[token]
+                    idf_val = self.idf.get(token, 0.0)
+                    numerator = tf_val * (self.k1 + 1)
+                    denominator = tf_val + self.k1 * (1 - self.b + self.b * (doc_len / self.avg_doc_len))
+                    score += idf_val * (numerator / denominator)
+            scores.append((score, idx))
+
+        scores.sort(key=lambda x: x[0], reverse=True)
+        return scores[:top_k]
 
 
 # ── Chunker ────────────────────────────────────────────────────────────────────
@@ -112,10 +214,9 @@ class PortfolioRAG:
             raise RuntimeError("GROQ_API_KEY not set in .env")
         self.groq = Groq(api_key=api_key)
 
-        # Load local embedding model (downloads once, ~22MB)
-        logger.info(f"Loading embedding model: {EMBED_MODEL_NAME}")
-        self.embedder = SentenceTransformer(EMBED_MODEL_NAME)
-        logger.info("Embedding model loaded.")
+        # Hugging Face serverless embedding is used instead of local sentence-transformers
+        logger.info(f"Embedding model configured for Hugging Face API: {EMBED_MODEL_NAME}")
+        self.bm25: SimpleBM25 | None = None
 
         self._load_all_documents()
         logger.info("PortfolioRAG ready.")
@@ -141,6 +242,12 @@ class PortfolioRAG:
 
         self.chunks = all_chunks
         logger.info(f"Total chunks indexed: {len(self.chunks)}")
+        
+        # Initialize local BM25 fallback index
+        corpus = [c["text"] for c in self.chunks]
+        self.bm25 = SimpleBM25(corpus)
+        logger.info("Local BM25 index initialized successfully.")
+        
         self._load_or_generate_embeddings()
 
     # ── Embedding Cache ────────────────────────────────────────────────────────
@@ -159,9 +266,13 @@ class PortfolioRAG:
             except Exception as e:
                 logger.warning(f"Cache read error: {e}. Regenerating...")
 
-        logger.info("Generating embeddings with sentence-transformers...")
-        vecs = self.embedder.encode(chunk_texts, show_progress_bar=True, convert_to_numpy=True)
-        self.embeddings = vecs.tolist()
+        logger.info("Generating embeddings using Hugging Face Inference API...")
+        try:
+            vecs = get_huggingface_embedding(chunk_texts)
+            self.embeddings = vecs
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings at startup: {e}")
+            self.embeddings = [[0.0] * 384] * len(self.chunks)
 
         CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         CACHE_FILE.write_text(
@@ -172,30 +283,48 @@ class PortfolioRAG:
 
     # ── Retrieval ──────────────────────────────────────────────────────────────
     def retrieve(self, query: str, top_k: int = TOP_K) -> list[dict]:
-        """Embed query, rank chunks by cosine similarity, apply threshold."""
+        """Embed query, rank chunks by cosine similarity. Fallback to BM25 if API fails."""
         if not self.chunks:
             return []
 
-        q_vec = self.embedder.encode([query], convert_to_numpy=True)[0].tolist()
-
-        scored = [
-            (cosine_similarity(q_vec, emb), i)
-            for i, emb in enumerate(self.embeddings)
-        ]
-        scored.sort(key=lambda x: x[0], reverse=True)
-
         results = []
-        for score, idx in scored[:top_k]:
-            if score < SCORE_THRESHOLD:
-                logger.debug(f"Chunk {idx} below threshold ({score:.3f}), skipping.")
-                break
-            results.append({
-                "text": self.chunks[idx]["text"],
-                "source": self.chunks[idx]["source"],
-                "score": round(score, 4),
-            })
+        try:
+            # 1. Attempt Hugging Face API embedding
+            q_vec = get_huggingface_embedding([query])[0]
 
-        logger.info(f"Retrieved {len(results)} chunks for query: '{query[:60]}...'")
+            scored = [
+                (cosine_similarity(q_vec, emb), i)
+                for i, emb in enumerate(self.embeddings)
+            ]
+            scored.sort(key=lambda x: x[0], reverse=True)
+
+            for score, idx in scored[:top_k]:
+                if score < SCORE_THRESHOLD:
+                    logger.debug(f"Chunk {idx} below threshold ({score:.3f}), skipping.")
+                    break
+                results.append({
+                    "text": self.chunks[idx]["text"],
+                    "source": self.chunks[idx]["source"],
+                    "score": round(score, 4),
+                })
+            logger.info(f"Retrieved {len(results)} chunks using Hugging Face API for query: '{query[:60]}...'")
+
+        except Exception as e:
+            logger.warning(f"Hugging Face embedding query failed, falling back to local BM25: {e}")
+            if self.bm25:
+                bm25_results = self.bm25.search(query, top_k)
+                for score, idx in bm25_results:
+                    if score <= 0.0:
+                        continue
+                    results.append({
+                        "text": self.chunks[idx]["text"],
+                        "source": self.chunks[idx]["source"],
+                        "score": round(score, 4),
+                    })
+                logger.info(f"Retrieved {len(results)} chunks using Local BM25 fallback for query: '{query[:60]}...'")
+            else:
+                logger.error("BM25 fallback index is not initialized.")
+
         return results
 
     # ── Session Memory ─────────────────────────────────────────────────────────

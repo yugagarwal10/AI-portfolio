@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 groq
 python-dotenv
-sentence-transformers
+requests
 numpy
 sse-starlette
 pymongo
